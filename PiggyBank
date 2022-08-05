@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.10;
+
+contract PiggyBank {
+    event Deposit(uint amount);
+    event Withdraw(uint amount);
+    error notOwner();
+    address public owner;
+    constructor() {
+         owner = msg.sender;
+    }
+    
+    //receiving funds 
+    receive() external payable {
+        emit Deposit(msg.value);
+    }
+
+    //withdrawal
+    function withdrawal() external {
+        if(msg.sender == owner){
+            revert notOwner();
+        };
+        emit Withdraw(address(this).balance);
+        selfdestruct(payable(msg.sender));
+    }
+}
