@@ -1,0 +1,83 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.10;
+
+
+interface IERC721 {
+    function transferFrom(address from, address to, uint nftId) external;
+    function approve(address spender, uint id) external;
+}
+
+contract englishAuction{
+    address public immutable seller;
+    IERC721 public immutable nft;
+    address public highestbidder;
+    mapping(address => uint) public outbidded;
+    uint public immutable nftId;
+    uint public immutable startingprice;
+    uint public highestbid;
+    uint public immutable endAt;
+
+    //events
+    event nftSold(address highestbidder,uint highestbid);
+
+    //errors
+    error auctionHasEnded();
+    error notEnoughMoney();
+    error auctionHasNotEnded();
+    
+
+
+    constructor(address _nft, uint _nftId, uint _startingprice,uint duration){
+        seller = msg.sender;
+        nft = IERC721(_nft);
+        nftId = _nftId;
+        startingprice = _startingprice;
+        endAt = block.timestamp + duration;      
+        
+    }
+
+    function bid() external payable {
+        if(block.timestamp > endAt){
+            revert auctionHasEnded();
+        }
+        
+        if(msg.value < highestbid && msg.value < startingprice){
+            revert notEnoughMoney();
+        }
+        
+        if(highestbidder != address(0)){
+            outbidded[highestbidder] += highestbid;
+        }
+        highestbid = msg.value;
+        highestbidder = msg.sender;
+
+    }
+
+    function end() external {
+        if(block.timestamp < endAt){
+            revert auctionHasNotEnded();
+        }
+        payable(seller).transfer(highestbid);
+
+        if(highestbidder != address(0)){
+            nft.transferFrom(seller,highestbidder,nftId);
+        }
+        emit nftSold(highestbidder,highestbid);
+        
+        
+        
+    }
+
+    function withdraw() external {
+        if(block.timestamp < endAt){
+            revert auctionHasNotEnded();
+        }        
+        uint balance = outbidded[msg.sender];
+        if(balance > 0){
+            outbidded[msg.sender] = 0;
+            payable(msg.sender).transfer(balance);
+        }
+        
+    }
+
+}
