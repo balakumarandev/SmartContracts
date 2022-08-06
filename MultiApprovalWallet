@@ -1,0 +1,138 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.10;
+
+contract MultiSignatureWallet{
+    //declare variables and constants
+    address[] public owners;
+    mapping(address => bool) public isOwner;
+    mapping(address => mapping(uint => bool)) public isapproved;
+    uint public requiredapprovalcount;
+    struct Transaction{
+        address to;
+        uint amount;
+        bool executed;
+        uint approvedcount;
+        uint txid;
+    }
+    Transaction[] public transactions;
+
+    //declare events
+     event Deposited(address sender,uint amount);
+     event Proposed(address proposer,address to,uint amount);
+     event Approved(address approver,uint txid);
+     event Disapproved(address disapprover,uint txid);
+     event Executed(address executer,uint txid,uint approvedcount);
+
+
+
+
+    //declare errors
+    error ownerNotUnique(address repeatedOwner);
+    error youAreNotOwner();
+    error addressNotValid(address invalid);
+    error alreadyapproved(uint txid);
+    error youHaveNotApprovedYet(uint txid);
+    error notEnoughApprovers(uint approversforthistx, uint txid);
+    error alreadyExecuted(uint txid);
+    error notEnoughBalance(uint amount, uint balanceInContract);
+
+    //modifiers
+    modifier onlyowner(){
+        if(!isOwner[msg.sender]){
+            revert youAreNotOwner();
+        }
+        _;
+    }
+
+    
+    constructor(address[] memory _owners,uint _requiredapprovalcount){
+        //checking owners to be unique and valid 
+        for(uint i=0;i<_owners.length;i++)
+        {
+            if(isOwner[_owners[i]]){
+                revert ownerNotUnique(_owners[i]);                
+            }
+            if(_owners[i]==address(0)){
+                    revert addressNotValid(_owners[i]);
+                }
+            isOwner[_owners[i]]=true;
+            requiredapprovalcount = _requiredapprovalcount;
+        }
+    }
+
+    //Receive ether
+    receive() external payable{
+        emit Deposited(msg.sender,msg.value);
+    }
+
+    //propose a transaction
+    function propose(address _to, uint _amount) external onlyowner returns(bool){
+        transactions.push(Transaction({
+            to: _to,
+            amount: _amount,
+            executed: false,
+            approvedcount: 0,
+            txid: transactions.length
+        }));
+        emit Proposed(msg.sender,_to,_amount);
+        return true;
+    }
+
+    //approve a transaction
+    function approve(uint _txid) external onlyowner returns (bool){
+        if(isapproved[msg.sender][_txid]){
+            revert alreadyapproved(_txid);
+        }
+        isapproved[msg.sender][_txid] = true;
+        transactions[_txid].approvedcount += 1;
+        emit Approved(msg.sender,_txid);
+        return true;
+    }
+
+    //disapprove a transaction
+    function disapprove(uint _txid) external onlyowner returns(bool){
+        if(isapproved[msg.sender][_txid]){
+            isapproved[msg.sender][_txid] = false;
+            transactions[_txid].approvedcount -= 1;
+            emit Disapproved(msg.sender,_txid);
+            return true;
+        }
+        revert youHaveNotApprovedYet(_txid);
+        
+    }
+
+    //check balance
+    function checkbalance() external view onlyowner returns(uint) {
+        return address(this).balance;
+    }
+
+    //check approvedcount
+    function checkapprovedcount(uint _txid) external view onlyowner returns(uint) {
+        return transactions[_txid].approvedcount;
+    }
+
+    //execute any transaction by any owner
+    function execute(uint _txid) external onlyowner returns(bool) {
+        if(transactions[_txid].executed){
+            revert alreadyExecuted(_txid);
+        }
+
+        if(transactions[_txid].approvedcount < requiredapprovalcount){
+            revert notEnoughApprovers(transactions[_txid].approvedcount,_txid);
+        }
+        
+        address payable to = payable(transactions[_txid].to);
+        uint amount = transactions[_txid].amount;
+        if(amount > address(this).balance){
+            revert notEnoughBalance(amount,address(this).balance);
+        }
+        to.transfer(amount);
+        transactions[_txid].executed = true;
+        emit Executed(msg.sender,_txid, transactions[_txid].approvedcount);
+        return true;
+
+
+    }
+
+
+}
