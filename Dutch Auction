@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.10;
+
+//interface for standard nft contract
+interface IERC721 {
+    function transferFrom(address _from, address _to, uint _nftId) external;
+}
+
+contract DutchAuction{
+    uint public immutable duration;
+    uint public immutable startingPrice;
+    uint public immutable startAt;
+    uint public immutable endAt;
+    uint public immutable discountRate;
+    uint public immutable nftId;
+    IERC721 public immutable nft;
+    address public immutable seller;
+
+    //events
+    event sold(address buyer, uint amount);
+
+    //errors
+    error StartingPriceIsLessThanDiscount(uint startingPrice);
+    error valueSendIsLessThanThePrice(uint valueSent,uint price);
+
+    constructor(uint _duration,uint _startingPrice,uint _discountRate,uint _nftId,address _nft){
+        duration = _duration;
+        discountRate = _discountRate;
+        if(_startingPrice < discountRate * duration){
+            revert StartingPriceIsLessThanDiscount(_startingPrice);
+        }  
+        startingPrice = _startingPrice;              
+        nftId = _nftId;
+        nft = IERC721(_nft);
+        startAt = block.timestamp;
+        endAt = block.timestamp + duration;
+        seller = msg.sender;
+    }
+
+    //checking on price
+    function getPrice() public view returns(uint){
+        uint discount = discountRate * (block.timestamp - startAt);
+        return startingPrice - discount;
+    }
+
+    //buy
+    function buy() payable external {
+        uint currentprice = getPrice();
+        if(msg.value < currentprice){
+            revert valueSendIsLessThanThePrice(msg.value,currentprice);
+        }
+        uint refund = msg.value - currentprice;
+        //incase of DOS attack we can atleast prevent the transfer of our nft
+        payable(msg.sender).transfer(refund);
+        nft.transferFrom(seller,msg.sender,nftId);
+        emit sold(msg.sender,currentprice);
+        selfdestruct(payable(seller));
+        
+    }
+
+}
