@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.13;
+
+
+interface IERC20 {
+    function totalSupply() external view returns (uint);
+
+    function balanceOf(address account) external view returns (uint);
+
+    function transfer(address recipient, uint amount) external returns (bool);
+
+    function allowance(address owner, address spender) external view returns (uint);
+
+    function approve(address spender, uint amount) external returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint amount
+    ) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint amount);
+    event Approval(address indexed owner, address indexed spender, uint amount);
+}
+
+
+
+
+contract CSAMM {
+    IERC20 public immutable token1;
+    IERC20 public immutable token2;
+    uint public totalsupply;
+    uint reserve1;
+    uint reserve2;
+    mapping(address=>uint) public balanceof;
+
+    event invalidToken(address invalidtokenaddress);
+    
+
+
+
+    constructor(IERC20 _token1,IERC20 _token2){
+        token1 = _token1;
+        token2 = _token2;
+
+    }
+
+    function swap(address _token,uint _amountIN) external returns(uint amountreceived){
+        if(_token == address(token1)){
+            token1.transferFrom(msg.sender,address(this),_amountIN);
+            amountreceived = token1.balanceOf(address(this)) - reserve1;
+            reserve1 += amountreceived;
+            token2.transfer(msg.sender,amountreceived);
+            reserve2 -= amountreceived;
+        }
+        else if (_token == address(token2)) {
+            token2.transferFrom(msg.sender,address(this),_amountIN);
+            amountreceived = token2.balanceOf(address(this)) - reserve1;
+            reserve2 += amountreceived;
+            token1.transfer(msg.sender,amountreceived);
+            reserve1 -= amountreceived;
+        }
+        else{
+            emit invalidToken(_token);
+        }
+
+        
+
+    }
+
+
+    function addLiquidity(uint amount1, uint amount2) external returns(uint shares){
+        token1.transferFrom(msg.sender,address(this),amount1);
+        token2.transferFrom(msg.sender,address(this),amount2);
+        uint bal1= token1.balanceOf(address(this));
+        uint bal2= token2.balanceOf(address(this));
+        uint d1 = bal1 - reserve1;
+        uint d2 = bal2 - reserve2;
+        if(totalsupply > 0){
+            shares = (d1+d2) * totalsupply / (reserve1+reserve2);
+        }
+        else{
+            shares = d1 + d2;
+        }
+        balanceof[msg.sender]+=shares;
+        totalsupply+=shares;
+        reserve1 = bal1;
+        reserve2 = bal2;
+        
+
+    }
+
+    function removeLiquidity(uint _shares) external returns(uint d1,uint d2){
+        if(_shares <= balanceof[msg.sender] ){
+            d1 = (reserve1 * _shares) / totalsupply;
+            d2 = (reserve2 * _shares) / totalsupply;
+            balanceof[msg.sender]-=_shares;
+            totalsupply-=_shares;
+            reserve1-=d1;
+            reserve2-=d2;
+            if(d1>0){
+            token1.transfer(msg.sender,d1);
+            }
+            if(d2>0){
+            token2.transfer(msg.sender,d2);
+            }
+        }
+    }
+}
+
+
