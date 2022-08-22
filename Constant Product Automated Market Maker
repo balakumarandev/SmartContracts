@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.13;
+
+interface IERC20 {
+    function totalSupply() external view returns (uint);
+
+    function balanceOf(address account) external view returns (uint);
+
+    function transfer(address recipient, uint amount) external returns (bool);
+
+    function allowance(address owner, address spender) external view returns (uint);
+
+    function approve(address spender, uint amount) external returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint amount
+    ) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint amount);
+    event Approval(address indexed owner, address indexed spender, uint amount);
+}
+
+
+contract constantProductAMM{
+    IERC20 public immutable token1;
+    IERC20 public immutable token2;
+    uint public reserve1;
+    uint public reserve2;
+    uint public totalSupply;
+    mapping(address => uint) public balanceOf;
+
+    event invalidToken(address invalidTokenaddress);
+
+    constructor(IERC20 _token1,IERC20 _token2){
+        token1 = _token1;
+        token2 = _token2;
+    }
+
+    function swap(address _token,uint _amountIN) external returns(uint amountOut){
+        require(_amountIN > 0,"amountIN should be greater than 0");
+        if(_token == address(token1)){
+            token1.transferFrom(msg.sender,address(this),_amountIN);
+            uint amountreceived = token1.balanceOf(address(this)) - reserve1;
+            amountOut = (reserve2 * amountreceived) / (reserve1 + amountreceived);
+            reserve1 += amountreceived;
+            reserve2 -= amountOut;
+            token2.transfer(msg.sender,amountOut);
+        }
+        else if (_token == address(token2)) {
+            token2.transferFrom(msg.sender,address(this),_amountIN);
+            uint amountreceived = token2.balanceOf(address(this)) - reserve2;
+            amountOut = (reserve1 * amountreceived) / (reserve2 + amountreceived);
+            reserve2 += amountreceived;
+            reserve1 -= amountOut;
+            token1.transfer(msg.sender,amountOut);
+        }
+        else{
+            emit invalidToken(_token);
+        }
+    }
+
+    function addLiquidity(uint amount1,uint amount2) external returns(uint shares){
+        token1.transferFrom(msg.sender,address(this),amount1);
+        token2.transferFrom(msg.sender,address(this),amount2);
+        uint amountreceived1 = token1.balanceOf(address(this)) - reserve1;
+        uint amountreceived2 = token2.balanceOf(address(this)) - reserve2;
+         if (reserve1 > 0 || reserve2 > 0) {
+            require(reserve1 * amountreceived2 == reserve2 * amountreceived1, "x / y != dx / dy");
+        }
+        if(totalSupply == 0){
+            shares = _sqrt(amountreceived1 * amountreceived2);
+        }
+        else{
+            shares = _min(
+                ((amountreceived1 * totalSupply) / reserve1),
+                ((amountreceived2 * totalSupply) / reserve2)
+            );
+        }
+        require(shares > 0, "shares = 0");
+        balanceOf[msg.sender] += shares;
+        totalSupply += shares;
+        reserve2 += amountreceived2;
+        reserve1 += amountreceived1;
+    }
+
+
+    function _sqrt(uint y) private pure returns (uint z) {
+        if (y > 3) {
+            z = y;
+            uint x = y / 2 + 1;
+            while (x < z) {
+                z = x;
+                x = (y / x + x) / 2;
+            }
+        } else if (y != 0) {
+            z = 1;
+        }
+    }
+
+    function _min(uint x, uint y) private pure returns (uint) {
+        return x <= y ? x : y;
+    }
+
+    function removeLiquidity(uint shares) external returns(uint d1,uint d2){
+        d1 = (reserve1 * shares) / totalSupply;
+        d2 = (reserve2 * shares) / totalSupply;
+        balanceOf[msg.sender] -= shares;
+        totalSupply -= shares;
+        reserve2 -= d2;
+        reserve1 -= d1;
+        if (d1 > 0) {
+            token1.transfer(msg.sender, d1);
+        }
+        if (d2 > 0) {
+            token2.transfer(msg.sender, d2);
+        }
+
+    }
+
+}
