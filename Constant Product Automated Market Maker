@@ -118,5 +118,15 @@ contract constantProductAMM{
         }
 
     }
-
+    
+    function IDKratio(address tokenx,uint amount) external view returns (uint othertoken){
+        if(tokenx == address(token1)){
+            othertoken = (reserve2 * amount) / reserve1;
+            
+        }
+        else if(tokenx == address(token2)){
+            othertoken = (reserve1 * amount) / reserve2;
+            
+        }
+    }
 }
