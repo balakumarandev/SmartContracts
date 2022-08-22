@@ -46,6 +46,7 @@ contract CSAMM {
     }
 
     function swap(address _token,uint _amountIN) external returns(uint amountreceived){
+        require(_amountIN > 0,"amountIN should be greater than 0");
         if(_token == address(token1)){
             token1.transferFrom(msg.sender,address(this),_amountIN);
             amountreceived = token1.balanceOf(address(this)) - reserve1;
