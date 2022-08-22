@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.6.0;
+
+contract Lottery{
+    uint public jackpot;
+    address public manager;
+    address[] public players;
+    address public onlywinner;
+
+    //events
+    event Deposited(uint amount);
+    event WinnerPaid(address winner, uint jackpot);
+
+    //storing creater address
+    constructor() public {
+        manager = msg.sender; 
+    }
+
+    
+
+    //onlyManager can call
+    modifier onlyManager() {
+        require(msg.sender == manager,"you are not Manager");
+        _;
+    }
+
+    //entering into lottery
+    function enter() public payable{
+        //player should send atleast 1 ether
+        require(msg.value >= 1 ether);
+        players.push(msg.sender);
+        jackpot += msg.value;
+        emit Deposited(msg.value);
+    }
+
+
+    //picking a winner
+    function pickwinner() public onlyManager{        
+        uint index = random() % players.length;
+        onlywinner = players[index];
+        //resetting the player array to avoid any problems
+        players = new address[](0);
+        emit WinnerPaid(onlywinner,jackpot);
+    }
+
+    //allow the winner to withdraw to prevent dos attacks and reentrancy
+    function withdraw() external {
+        require(msg.sender == onlywinner,"you are not winner");
+        jackpot = 0;
+        payable(onlywinner).transfer(jackpot);
+
+    }
+
+    //random num generator
+    function random() private pure returns(uint){
+        return uint(keccak256("block.timestamp,players.length")); 
+    }
+    
+
+    //to destroy the contract
+    function destroy() external onlyManager {
+        require(jackpot == 0,"not finished");
+        selfdestruct(payable(manager));
+    }
+
+
+
+    receive() external payable{
+        
+    }
+    
+    
+}
